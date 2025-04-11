@@ -5,6 +5,7 @@ pipeline {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
         SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner'
+        SONARQUBE_URL = 'http://192.168.33.10:9000'
     }
 
     stages {
@@ -20,6 +21,8 @@ pipeline {
             steps {
                 script {
                     sh 'npm install'
+                    // Generate coverage report if you have tests
+                    // sh 'npm test -- --coverage'
                 }
             }
         }
@@ -27,21 +30,20 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('SonarQube') {
-                        script {
-                            timeout(time: 15, unit: 'MINUTES') {
-                                // Using the environment variable approach instead of parameter
-                                sh """
-                                ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
-                                -Dsonar.projectKey=foodwaste-app \
-                                -Dsonar.projectName=foodwaste-app \
-                                -Dsonar.sources=src \
-                                -Dsonar.tests=test \
-                                -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
-                                -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                                -Dsonar.sourceEncoding=UTF-8
-                                """
-                            }
+                    script {
+                        timeout(time: 15, unit: 'MINUTES') {
+                            sh """
+                            ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.projectKey=foodwaste-app \
+                            -Dsonar.projectName=foodwaste-app \
+                            -Dsonar.host.url=${SONARQUBE_URL} \
+                            -Dsonar.login=${SONAR_TOKEN} \
+                            -Dsonar.sources=src \
+                            -Dsonar.tests=test \
+                            -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
+                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                            -Dsonar.sourceEncoding=UTF-8
+                            """
                         }
                     }
                 }
@@ -88,7 +90,7 @@ pipeline {
         }
 
         success {
-            echo "✅ Pipeline executed successfully!"
+            echo "✅ Pipeline executed successfully! Application is running at http://<your-server-ip>:5000"
         }
 
         failure {
