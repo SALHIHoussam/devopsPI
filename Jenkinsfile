@@ -4,8 +4,9 @@ pipeline {
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
-        // Use the correct tool name that matches your Jenkins configuration
-        SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner' // Must match exactly what you configured in Jenkins
+
+        // Ce nom DOIT correspondre à l'outil défini dans "Global Tool Configuration"
+        SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner'
     }
 
     stages {
@@ -24,9 +25,10 @@ pipeline {
                 }
             }
         }
+
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('SonarQube') { // Ce nom DOIT correspond à celui déclaré dans "SonarQube Servers"
                     script {
                         sh """
                         ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
@@ -43,14 +45,12 @@ pipeline {
             }
         }
 
-
         stage('Build Application') {
             steps {
                 script {
-                    // Run in background and capture the process ID
+                    // Lancer le serveur en arrière-plan
                     sh 'nohup npm run dev & echo $! > app.pid'
-                    // Wait for server to start (adjust sleep time as needed)
-                    sh 'sleep 15'
+                    sh 'sleep 15' // attendre que le serveur démarre (à ajuster si nécessaire)
                 }
             }
         }
@@ -58,17 +58,17 @@ pipeline {
         stage('Docker Build and Run') {
             steps {
                 script {
-                    // Build Docker image
+                    // Build de l’image
                     sh 'docker build -t foodwaste-app .'
 
-                    // Stop and remove existing container if running
+                    // Supprimer un conteneur existant s’il y en a un
                     sh '''
                         if [ $(docker ps -aq -f name=foodwaste) ]; then
                             docker rm -f foodwaste || true
                         fi
                     '''
 
-                    // Run Docker container
+                    // Lancer le conteneur
                     sh 'docker run -d --name foodwaste -p 5000:5000 foodwaste-app'
                 }
             }
@@ -78,9 +78,8 @@ pipeline {
     post {
         always {
             script {
-                // Need to wrap in node to get FilePath context
                 node {
-                    // Cleanup: Kill the Node.js process if it's still running
+                    // Arrêter le serveur Node.js lancé manuellement
                     sh '''
                         if [ -f app.pid ]; then
                             kill $(cat app.pid) || true
@@ -90,11 +89,13 @@ pipeline {
                 }
             }
         }
+
         success {
-            echo "Pipeline executed successfully! Your Node.js application was started and containerized."
+            echo "✅ Pipeline executed successfully! Your Node.js application was built, scanned and containerized."
         }
+
         failure {
-            echo "Pipeline failed. Check the logs for errors."
+            echo "❌ Pipeline failed. Check the logs for details."
         }
     }
 }
