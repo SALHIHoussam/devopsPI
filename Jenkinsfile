@@ -4,7 +4,8 @@ pipeline {
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
-        SONARQUBE_SCANNER_HOME = tool 'SonarQubeScanner'
+        // Use the correct tool name that matches your Jenkins configuration
+        SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner' // Must match exactly what you configured in Jenkins
     }
 
     stages {
@@ -24,10 +25,9 @@ pipeline {
             }
         }
 
-        // New SonarQube Analysis Stage
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') { 
+                withSonarQubeEnv('SonarQube') { // Must match your Jenkins SonarQube server name
                     script {
                         sh """
                         ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
@@ -77,13 +77,16 @@ pipeline {
     post {
         always {
             script {
-                // Cleanup: Kill the Node.js process if it's still running
-                sh '''
-                    if [ -f app.pid ]; then
-                        kill $(cat app.pid) || true
-                        rm -f app.pid
-                    fi
-                '''
+                // Need to wrap in node to get FilePath context
+                node {
+                    // Cleanup: Kill the Node.js process if it's still running
+                    sh '''
+                        if [ -f app.pid ]; then
+                            kill $(cat app.pid) || true
+                            rm -f app.pid
+                        fi
+                    '''
+                }
             }
         }
         success {
