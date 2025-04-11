@@ -28,7 +28,7 @@ COPY --from=builder /app .
 EXPOSE 5000
 
 # Runtime environment variable for MongoDB
-ENV MONGODB_URI=mongodb://mongo:27017/yourdb
+ENV MONGODB_URI=mongodb://mongo:27017/foodWasteDB
 
 # Command to run the application
 CMD ["npm", "start"]
