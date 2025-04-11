@@ -4,8 +4,8 @@ pipeline {
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
-
         SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner'
+        SONAR_TOKEN = credentials('sonar-token') 
     }
 
     stages {
@@ -21,24 +21,40 @@ pipeline {
             steps {
                 script {
                     sh 'npm install'
+                    // Generate coverage report if needed (uncomment if you have tests)
+                    // sh 'npm test -- --coverage'
                 }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') { 
+                withSonarQubeEnv('SonarQube') {
                     script {
-                        sh """
-                        ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=foodwaste-app \
-                        -Dsonar.projectName=foodwaste-app \
-                        -Dsonar.sources=src \
-                        -Dsonar.tests=test \
-                        -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                        -Dsonar.sourceEncoding=UTF-8
-                        """
+                        timeout(time: 15, unit: 'MINUTES') {
+                            sh """
+                            ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.projectKey=foodwaste-app \
+                            -Dsonar.projectName=foodwaste-app \
+                            -Dsonar.sources=src \
+                            -Dsonar.tests=test \
+                            -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
+                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                            -Dsonar.sourceEncoding=UTF-8 \
+                            -Dsonar.login=${SONAR_TOKEN}
+                            """
+                        }
+                    }
+                }
+            }
+            
+            // Add quality gate check (optional)
+            post {
+                success {
+                    script {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
                     }
                 }
             }
@@ -47,9 +63,12 @@ pipeline {
         stage('Build Application') {
             steps {
                 script {
-                    // Lancer le serveur en arrière-plan
+                    // Start server in background
                     sh 'nohup npm run dev & echo $! > app.pid'
-                    sh 'sleep 15' // attendre que le serveur démarre (à ajuster si nécessaire)
+                    sh 'sleep 15' // Wait for server to start (adjust if needed)
+                    
+                    // Simple health check (optional)
+                    sh 'curl -I http://localhost:5000 || true'
                 }
             }
         }
@@ -57,18 +76,22 @@ pipeline {
         stage('Docker Build and Run') {
             steps {
                 script {
-                    // Build de l’image
+                    // Build the image
                     sh 'docker build -t foodwaste-app .'
-
-                    // Supprimer un conteneur existant s’il y en a un
+                    
+                    // Clean up existing container if it exists
                     sh '''
-                        if [ $(docker ps -aq -f name=foodwaste) ]; then
-                            docker rm -f foodwaste || true
+                        if [ $(docker ps -aq -f name=foodwaste-container) ]; then
+                            docker stop foodwaste-container || true
+                            docker rm -f foodwaste-container || true
                         fi
                     '''
-
-                    // Lancer le conteneur
-                    sh 'docker run -d --name foodwaste -p 5000:5000 foodwaste-app'
+                    
+                    // Run the container with environment variables
+                    sh 'docker run -d --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    
+                    // Verify container is running (optional)
+                    sh 'docker ps | grep foodwaste-container'
                 }
             }
         }
@@ -77,24 +100,30 @@ pipeline {
     post {
         always {
             script {
-                node {
-                    // Arrêter le serveur Node.js lancé manuellement
-                    sh '''
-                        if [ -f app.pid ]; then
-                            kill $(cat app.pid) || true
-                            rm -f app.pid
-                        fi
-                    '''
-                }
+                // Stop Node.js server if running
+                sh '''
+                    if [ -f app.pid ]; then
+                        kill $(cat app.pid) || true
+                        rm -f app.pid
+                    fi
+                '''
+                
+                // Clean up Docker (optional)
+                sh '''
+                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
+                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
+                '''
             }
         }
 
         success {
             echo "✅ Pipeline executed successfully! Your Node.js application was built, scanned and containerized."
+            echo "Application should be available at: http://<your-server-ip>:5000"
         }
 
         failure {
             echo "❌ Pipeline failed. Check the logs for details."
+            // You could add notification here (email, Slack, etc.)
         }
     }
 }
