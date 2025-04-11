@@ -1,20 +1,20 @@
-# Use an official Node.js runtime as a parent image
+# Utilise une image officielle Node.js légère
 FROM node:16-alpine
 
-# Set the working directory in the container
-WORKDIR /usr/src/app
+# Crée un dossier de travail dans le conteneur
+WORKDIR /app
 
-# Copy package.json and package-lock.json first to leverage Docker cache
-COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
+# Copie les fichiers de l'application dans le conteneur
 COPY . .
 
-# Expose the port your app runs on
-EXPOSE 3000
+# Installe les dépendances
+RUN npm install
 
-# Command to run the application
-CMD ["npm", "run", "dev"]
+# Construit l'application (à adapter selon ton script npm)
+RUN npm run build-dev
+
+# Expose le port sur lequel ton app écoute
+EXPOSE 5000
+
+# Commande à exécuter au démarrage du conteneur
+CMD ["npm", "start"]
