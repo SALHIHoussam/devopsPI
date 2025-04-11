@@ -26,27 +26,26 @@ pipeline {
         }
         
         stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
-                    script {
-                        timeout(time: 15, unit: 'MINUTES') {
-                            sh """
-                            export SONAR_SCANNER_OPTS="-Dsonar.token=${SONAR_AUTH_TOKEN}"
-                            ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.projectKey=foodwaste-app \
-                            -Dsonar.projectName=foodwaste-app \
-                            -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.sources=src \
-                            -Dsonar.tests=test \
-                            -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
-                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                            -Dsonar.sourceEncoding=UTF-8
-                            """
-                        }
-                    }
-                }
+    steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+            script {
+                sh """
+                curl -u ${SONAR_TOKEN}: http://192.168.33.10:9000/api/server/version
+                ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
+                -Dsonar.projectKey=foodwaste-app \
+                -Dsonar.projectName=foodwaste-app \
+                -Dsonar.host.url=http://192.168.33.10:9000 \
+                -Dsonar.login=${SONAR_TOKEN} \
+                -Dsonar.sources=src \
+                -Dsonar.tests=test \
+                -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
+                -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                -Dsonar.sourceEncoding=UTF-8
+                """
             }
         }
+    }
+}
 
         stage('Build Application') {
             steps {
