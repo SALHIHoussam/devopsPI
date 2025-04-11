@@ -29,7 +29,7 @@ pipeline {
         stage('SonarQube Analysis') {
             environment {
                 // Move SONAR_TOKEN here to avoid conflict with withSonarQubeEnv
-                SONAR_TOKEN = credentials('sonarqube-token')
+                SONAR_TOKEN = credentials('sonar-token')
             }
             steps {
                 withSonarQubeEnv('SonarQube') {
