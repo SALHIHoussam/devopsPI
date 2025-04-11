@@ -5,7 +5,6 @@ pipeline {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
 
-        // Ce nom DOIT correspondre à l'outil défini dans "Global Tool Configuration"
         SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner'
     }
 
@@ -28,7 +27,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') { // Ce nom DOIT correspond à celui déclaré dans "SonarQube Servers"
+                withSonarQubeEnv('scanner') { 
                     script {
                         sh """
                         ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
