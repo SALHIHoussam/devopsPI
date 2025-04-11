@@ -21,23 +21,21 @@ pipeline {
             steps {
                 script {
                     sh 'npm install'
-                    // Generate coverage report if you have tests
-                    // sh 'npm test -- --coverage'
                 }
             }
         }
-
+        
         stage('SonarQube Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
                     script {
                         timeout(time: 15, unit: 'MINUTES') {
                             sh """
+                            export SONAR_SCANNER_OPTS="-Dsonar.token=${SONAR_AUTH_TOKEN}"
                             ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectKey=foodwaste-app \
                             -Dsonar.projectName=foodwaste-app \
                             -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.login=${SONAR_TOKEN} \
                             -Dsonar.sources=src \
                             -Dsonar.tests=test \
                             -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
