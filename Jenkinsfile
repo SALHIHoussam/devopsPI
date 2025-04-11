@@ -4,6 +4,7 @@ pipeline {
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
+        SONARQUBE_SCANNER_HOME = tool 'SonarQubeScanner'
     }
 
     stages {
@@ -19,6 +20,25 @@ pipeline {
             steps {
                 script {
                     sh 'npm install'
+                }
+            }
+        }
+
+        // New SonarQube Analysis Stage
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') { 
+                    script {
+                        sh """
+                        ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectKey=foodwaste-app \
+                        -Dsonar.projectName=foodwaste-app \
+                        -Dsonar.sources=. \
+                        -Dsonar.exclusions=node_modules/**,**/*.spec.js \
+                        -Dsonar.javascript.file.suffixes=.js \
+                        -Dsonar.sourceEncoding=UTF-8
+                        """
+                    }
                 }
             }
         }
