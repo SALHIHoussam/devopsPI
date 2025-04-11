@@ -24,20 +24,12 @@ pipeline {
                 }
             }
         }
-
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') { // Must match your Jenkins SonarQube server name
+                withSonarQubeEnv('SonarQube') {
                     script {
-                        sh """
-                        ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=foodwaste-app \
-                        -Dsonar.projectName=foodwaste-app \
-                        -Dsonar.sources=. \
-                        -Dsonar.exclusions=node_modules/**,**/*.spec.js \
-                        -Dsonar.javascript.file.suffixes=.js \
-                        -Dsonar.sourceEncoding=UTF-8
-                        """
+                        def scannerHome = tool 'scanner'
+                        sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
             }
