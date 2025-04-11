@@ -1,20 +1,34 @@
-# Utilise une image officielle Node.js légère
-FROM node:16-alpine
+# Use official Node.js LTS image (updated to 18.x)
+FROM node:18-alpine as builder
 
-# Crée un dossier de travail dans le conteneur
+# Create app directory
 WORKDIR /app
 
-# Copie les fichiers de l'application dans le conteneur
-COPY . .
+# Copy package files first for better caching
+COPY package*.json ./
 
-# Installe les dépendances
+# Install dependencies
 RUN npm install
 
-# Construit l'application (à adapter selon ton script npm)
-RUN npm run dev
+# Copy all source files
+COPY . .
 
-# Expose le port sur lequel ton app écoute
+# Build the application (if needed)
+# RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy from builder stage
+COPY --from=builder /app .
+
+# Expose application port
 EXPOSE 5000
 
-# Commande à exécuter au démarrage du conteneur
+# Runtime environment variable for MongoDB
+ENV MONGODB_URI=mongodb://mongo:27017/yourdb
+
+# Command to run the application
 CMD ["npm", "start"]
