@@ -28,12 +28,21 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     script {
-                        def scannerHome = tool 'scanner'
-                        sh "${scannerHome}/bin/sonar-scanner"
+                        sh """
+                        ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectKey=foodwaste-app \
+                        -Dsonar.projectName=foodwaste-app \
+                        -Dsonar.sources=src \
+                        -Dsonar.tests=test \
+                        -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
+                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                        -Dsonar.sourceEncoding=UTF-8
+                        """
                     }
                 }
             }
         }
+
 
         stage('Build Application') {
             steps {
