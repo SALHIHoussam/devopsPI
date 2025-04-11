@@ -11,7 +11,7 @@ COPY . .
 RUN npm install
 
 # Construit l'application (à adapter selon ton script npm)
-RUN npm run build-dev
+RUN npm run dev
 
 # Expose le port sur lequel ton app écoute
 EXPOSE 5000
