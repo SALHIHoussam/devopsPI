@@ -30,12 +30,11 @@ pipeline {
         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
             script {
                 sh """
-                curl -u ${SONAR_TOKEN}: http://192.168.33.10:9000/api/server/version
                 ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
                 -Dsonar.projectKey=foodwaste-app \
                 -Dsonar.projectName=foodwaste-app \
                 -Dsonar.host.url=http://192.168.33.10:9000 \
-                -Dsonar.login=${SONAR_TOKEN} \
+                -Dsonar.token=${SONAR_TOKEN} \  # Use 'token' instead of 'login'
                 -Dsonar.sources=src \
                 -Dsonar.tests=test \
                 -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
