@@ -24,25 +24,16 @@ pipeline {
                 }
             }
         }
-        stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    script {
-                        sh """
-                        ${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=foodwaste-app \
-                        -Dsonar.projectName=foodwaste-app \
-                        -Dsonar.host.url=http://192.168.33.10:9000 \
-                        -Dsonar.token=${SONAR_TOKEN} \
-                        -Dsonar.sources=src \
-                        -Dsonar.tests=test \
-                        -Dsonar.exclusions=node_modules/**,dist/**,coverage/**,**/*.spec.js \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                        -Dsonar.sourceEncoding=UTF-8
-                        """
-                    }
-                }
-            }
+        
+        stage('SonarQube Analysis') { 
+            steps{ 
+                script { 
+                    def scannerHome = tool 'scanner' 
+                    withSonarQubeEnv { 
+                        sh "${scannerHome}/bin/sonar-scanner" 
+                    } 
+                } 
+            } 
         }
 
         stage('Build Application') {
