@@ -43,14 +43,6 @@ pipeline {
             }
         }
         
-        stage('Build and Run Docker Containers') {
-            steps {
-                script {
-                    sh 'docker-compose down || true'
-                    sh 'docker-compose up -d --build'
-                }
-            }
-        }
         
         stage('Docker Build and Run') {
             steps {
