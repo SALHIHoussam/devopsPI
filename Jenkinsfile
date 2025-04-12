@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        sonarqubeScanner 'SonarQube Scanner'
-    }
-
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
@@ -29,8 +25,12 @@ pipeline {
         
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar') {
-                    sh '${tool("SonarQube Scanner")}/bin/sonar-scanner'
+                script {
+                    // Utilisation directe de tool() dans un bloc script
+                    def scannerHome = tool 'SonarQube Scanner'
+                    withSonarQubeEnv('sonar') {
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
                 }
             }
         }
@@ -62,8 +62,9 @@ pipeline {
 
     post {
         always {
-            node {
-                script {
+            script {
+                // Correction: utilisation de node avec label
+                node('master') {
                     sh '''
                         if [ -f app.pid ]; then
                             kill $(cat app.pid) || true
