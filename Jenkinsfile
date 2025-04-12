@@ -2,8 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'mongodb://localhost:27017'
+        DB_HOST = 'mongodb://db:27017'  // Modifié pour utiliser le nom du service
         DB_NAME = 'foodWasteDB'
+        REGISTRY = '192.168.33.10:8083'
+        APP_IMAGE = "${REGISTRY}/nodemongoapp:6.0"
+        NEXUS_CREDS = credentials('nexus')
     }
 
     stages {
@@ -43,25 +46,38 @@ pipeline {
             }
         }
 
-        stage('Building images (node and mongo)') {
+        stage('Build and Push Docker Images') {
             steps {
                 script {
-                    sh 'docker-compose build'
+                    // Construire l'image
+                    sh "docker build -t ${APP_IMAGE} ."
+                    
+                    // Se connecter à Nexus et pousser l'image
+                    withCredentials([usernamePassword(credentialsId: 'nexus', passwordVariable: 'NEXUS_PASSWORD', usernameVariable: 'NEXUS_USERNAME')]) {
+                        sh "docker login -u ${NEXUS_USERNAME} -p ${NEXUS_PASSWORD} ${REGISTRY}"
+                        sh "docker push ${APP_IMAGE}"
+                    }
                 }
             }
         }
-        
-        stage('Docker Build and Run') {
+
+        stage('Deploy with Docker Compose') {
             steps {
                 script {
-                    sh 'docker build -t foodwaste-app .'
+                    // Arrêter les conteneurs existants
                     sh '''
                         if [ $(docker ps -aq -f name=foodwaste-container) ]; then
                             docker stop foodwaste-container || true
                             docker rm -f foodwaste-container || true
                         fi
+                        if [ $(docker ps -aq -f name=db) ]; then
+                            docker stop db || true
+                            docker rm -f db || true
+                        fi
                     '''
-                    sh 'docker run -d --restart unless-stopped --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    
+                    // Démarrer avec docker-compose
+                    sh 'docker-compose up -d'
                 }
             }
         }
@@ -70,7 +86,7 @@ pipeline {
     post {
         always {
             script {
-                // Nettoyage uniquement du processus npm
+                // Nettoyage des processus et conteneurs
                 sh '''
                     if [ -f app.pid ]; then
                         kill $(cat app.pid) || true
@@ -81,11 +97,11 @@ pipeline {
         }
 
         success {
-            echo "✅ Pipeline executed successfully! Application is running at http://<your-server-ip>:5000"
+            echo "✅ Pipeline exécuté avec succès! Application disponible sur http://192.168.33.10:5000"
         }
 
         failure {
-            echo "❌ Pipeline failed. Check the logs for details."
+            echo "❌ Échec du pipeline. Consultez les logs pour plus de détails."
         }
     }
 }
