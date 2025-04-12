@@ -43,12 +43,13 @@ pipeline {
             }
         }
         
-        stage('Building images (node and mongo)') { 
-            steps{ 
-                script { 
-                    sh('docker-compose build')
-                } 
-            } 
+        stage('Build and Run Docker Containers') {
+            steps {
+                script {
+                    sh 'docker-compose down || true'
+                    sh 'docker-compose up -d --build'
+                }
+            }
         }
         
         stage('Docker Build and Run') {
