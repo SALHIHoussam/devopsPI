@@ -26,7 +26,6 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Utilisation directe de tool() dans un bloc script
                     def scannerHome = tool 'SonarQube Scanner'
                     withSonarQubeEnv('sonar') {
                         sh "${scannerHome}/bin/sonar-scanner"
@@ -54,7 +53,7 @@ pipeline {
                             docker rm -f foodwaste-container || true
                         fi
                     '''
-                    sh 'docker run -d --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    sh 'docker run -d --restart unless-stopped --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
                 }
             }
         }
@@ -63,13 +62,12 @@ pipeline {
     post {
         always {
             script {
+                // Nettoyage uniquement du processus npm
                 sh '''
                     if [ -f app.pid ]; then
                         kill $(cat app.pid) || true
                         rm -f app.pid
                     fi
-                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
-                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
                 '''
             }
         }
