@@ -63,17 +63,14 @@ pipeline {
     post {
         always {
             script {
-                // Correction: utilisation de node avec label
-                node('master') {
-                    sh '''
-                        if [ -f app.pid ]; then
-                            kill $(cat app.pid) || true
-                            rm -f app.pid
-                        fi
-                        docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
-                        docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
-                    '''
-                }
+                sh '''
+                    if [ -f app.pid ]; then
+                        kill $(cat app.pid) || true
+                        rm -f app.pid
+                    fi
+                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
+                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
+                '''
             }
         }
 
