@@ -1,11 +1,13 @@
 pipeline {
     agent any
 
+    tools {
+        sonarqubeScanner 'SonarQube Scanner'
+    }
+
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
-        SONARQUBE_SCANNER_HOME = tool 'SonarQube Scanner'
-        SONARQUBE_URL = 'http://192.168.33.10:9000'
     }
 
     stages {
@@ -28,7 +30,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '${tool("scanner")}/bin/sonar-scanner'
+                    sh '${tool("SonarQube Scanner")}/bin/sonar-scanner'
                 }
             }
         }
@@ -60,15 +62,17 @@ pipeline {
 
     post {
         always {
-            script {
-                sh '''
-                    if [ -f app.pid ]; then
-                        kill $(cat app.pid) || true
-                        rm -f app.pid
-                    fi
-                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
-                    docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
-                '''
+            node {
+                script {
+                    sh '''
+                        if [ -f app.pid ]; then
+                            kill $(cat app.pid) || true
+                            rm -f app.pid
+                        fi
+                        docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker stop || true
+                        docker ps -aq --filter "name=foodwaste-container" | xargs --no-run-if-empty docker rm || true
+                    '''
+                }
             }
         }
 
