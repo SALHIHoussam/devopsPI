@@ -12,6 +12,10 @@ pipeline {
         SONAR_HOST_URL = 'http://192.168.33.10:9000'
         PROMETHEUS_PORT = '9090'
         GRAFANA_PORT = '3000'
+        PROMETHEUS_CONTAINER = 'foodwaste-prometheus'
+        GRAFANA_CONTAINER = 'foodwaste-grafana'
+        JENKINS_HOST = '172.17.0.1:8080'  // Adresse IP de Jenkins dans le réseau Docker
+        APP_HOST = '192.168.33.10:5000'   // Adresse IP de votre application
     }
 
     stages {
@@ -51,48 +55,58 @@ pipeline {
         stage('Setup Monitoring Stack') {
             steps {
                 script {
-                    // Installer le plugin Prometheus dans Jenkins
-                    sh '''
-                        echo "Vérification de l'installation du plugin Prometheus..."
-                        curl -X POST http://localhost:8080/restart -u admin:$(cat /var/lib/jenkins/secrets/initialAdminPassword)
-                    '''
-                    
-                    // Démarrer Prometheus
+                    // Nettoyage des anciens conteneurs
                     sh """
-                        docker run -d --name prometheus \
-                        -p ${PROMETHEUS_PORT}:9090 \
-                        -v ${WORKSPACE}/prometheus:/etc/prometheus \
-                        prom/prometheus
-                        
-                        # Attendre que Prometheus soit opérationnel
-                        while ! curl -s http://localhost:${PROMETHEUS_PORT}; do sleep 1; done
+                        docker stop ${PROMETHEUS_CONTAINER} || true
+                        docker rm ${PROMETHEUS_CONTAINER} || true
+                        docker stop ${GRAFANA_CONTAINER} || true
+                        docker rm ${GRAFANA_CONTAINER} || true
+                        rm -rf ${WORKSPACE}/prometheus ${WORKSPACE}/grafana
+                        mkdir -p ${WORKSPACE}/prometheus ${WORKSPACE}/grafana
                     """
                     
-                    // Configurer Prometheus
+                    // Configuration Prometheus
                     sh """
                         cat <<EOF > ${WORKSPACE}/prometheus/prometheus.yml
                         global:
                           scrape_interval: 15s
+                          evaluation_interval: 15s
                         
                         scrape_configs:
                           - job_name: 'jenkins'
                             metrics_path: '/prometheus'
                             static_configs:
-                              - targets: ['172.17.0.1:8080']
+                              - targets: ['${JENKINS_HOST}']
                           - job_name: 'node_app'
                             static_configs:
-                              - targets: ['192.168.33.10:5000']
+                              - targets: ['${APP_HOST}']
                         EOF
-                        
-                        docker restart prometheus
+                    """
+                    
+                    // Démarrer Prometheus
+                    sh """
+                        docker run -d --name ${PROMETHEUS_CONTAINER} \
+                        -p ${PROMETHEUS_PORT}:9090 \
+                        -v ${WORKSPACE}/prometheus:/etc/prometheus \
+                        prom/prometheus
                     """
                     
                     // Démarrer Grafana
                     sh """
-                        docker run -d --name grafana \
+                        docker run -d --name ${GRAFANA_CONTAINER} \
                         -p ${GRAFANA_PORT}:3000 \
                         -v ${WORKSPACE}/grafana:/var/lib/grafana \
+                        -e "GF_SECURITY_ADMIN_PASSWORD=grafana123" \
                         grafana/grafana
+                    """
+                    
+                    // Attendre que les services soient prêts
+                    sh """
+                        echo "Waiting for Prometheus to be ready..."
+                        while ! curl -s http://localhost:${PROMETHEUS_PORT} >/dev/null; do sleep 5; done
+                        
+                        echo "Waiting for Grafana to be ready..."
+                        while ! curl -s http://localhost:${GRAFANA_PORT} >/dev/null; do sleep 5; done
                     """
                 }
             }
@@ -158,6 +172,12 @@ pipeline {
                             docker-compose up -d
                         '''
                     }
+                    
+                    // Attendre que l'application soit prête
+                    sh '''
+                        echo "Waiting for application to be ready..."
+                        while ! curl -s http://${APP_HOST} >/dev/null; do sleep 5; done
+                    '''
                 }
             }
         }
@@ -165,26 +185,23 @@ pipeline {
         stage('Configure Grafana') {
             steps {
                 script {
-                    // Configurer Grafana automatiquement
+                    // Configuration automatique de Grafana
                     sh """
-                        # Attendre que Grafana soit prêt
-                        while ! curl -s http://localhost:${GRAFANA_PORT}; do sleep 1; done
-                        
-                        # Ajouter la source de données Prometheus
+                        # Configurer la source de données Prometheus
                         curl -X POST "http://localhost:${GRAFANA_PORT}/api/datasources" \
-                        -u admin:admin \
+                        -u admin:grafana123 \
                         -H "Content-Type: application/json" \
                         --data '{
                             "name":"Prometheus",
                             "type":"prometheus",
-                            "url":"http://prometheus:9090",
+                            "url":"http://${PROMETHEUS_CONTAINER}:9090",
                             "access":"proxy",
                             "basicAuth":false
                         }'
                         
                         # Importer le dashboard Jenkins
                         curl -X POST "http://localhost:${GRAFANA_PORT}/api/dashboards/import" \
-                        -u admin:admin \
+                        -u admin:grafana123 \
                         -H "Content-Type: application/json" \
                         --data '{
                             "dashboard":{
@@ -195,14 +212,11 @@ pipeline {
                             "overwrite":true
                         }'
                         
-                        # Changer le mot de passe admin
-                        curl -X PUT "http://localhost:${GRAFANA_PORT}/api/user/password" \
-                        -u admin:admin \
+                        # Configurer un dashboard pour l'application Node.js
+                        curl -X POST "http://localhost:${GRAFANA_PORT}/api/dashboards/db" \
+                        -u admin:grafana123 \
                         -H "Content-Type: application/json" \
-                        --data '{
-                            "oldPassword":"admin",
-                            "newPassword":"grafana123"
-                        }'
+                        --data @${WORKSPACE}/grafana-dashboard.json || echo "Using default dashboard"
                     """
                 }
             }
@@ -212,6 +226,7 @@ pipeline {
     post {
         always {
             script {
+                // Nettoyage des fichiers temporaires
                 sh '''
                     if [ -f app.pid ]; then
                         kill $(cat app.pid) || true
@@ -224,19 +239,24 @@ pipeline {
         success {
             script {
                 echo "✅ Pipeline executed successfully!"
-                echo "Application URL: http://192.168.33.10:5000"
+                echo "Application URL: http://${APP_HOST}"
                 echo "Prometheus URL: http://192.168.33.10:${PROMETHEUS_PORT}"
-                echo "Grafana URL: http://192.168.33.10:${GRAFANA_PORT} (admin/grafana123)"
+                echo "Grafana URL: http://192.168.33.10:${GRAFANA_PORT}"
+                echo "Grafana credentials: admin/grafana123"
+                echo "SonarQube URL: ${SONAR_HOST_URL}"
             }
         }
 
         failure {
             script {
-                echo "❌ Pipeline failed in stage: ${currentBuild.currentResult}"
-                if (currentBuild.currentResult == 'FAILURE') {
-                    def failedStage = currentBuild.rawBuild.getExecution().getStages().find { it.status.toString() == 'FAILED' }
-                    echo "Failure occurred in stage: ${failedStage?.name ?: 'Unknown'}"
-                }
+                // Version simplifiée pour éviter les problèmes de permission
+                echo "❌ Pipeline failed - check stage logs for details"
+                sh '''
+                    echo "Debug information:"
+                    docker ps -a
+                    docker logs ${PROMETHEUS_CONTAINER} || true
+                    docker logs ${GRAFANA_CONTAINER} || true
+                '''
             }
         }
 
