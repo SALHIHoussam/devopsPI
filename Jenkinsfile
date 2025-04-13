@@ -69,23 +69,24 @@ pipeline {
         }
         
         stage('Deploy to DockerHub') {
-            environment {
-                // Define credentials here instead of at the top level
-                DOCKERHUB_USERNAME = credentials('dockerhub-credentials').username
-                DOCKERHUB_PASSWORD = credentials('dockerhub-credentials').password
-            }
             steps {
                 script {
                     retry(3) {
-                        sh '''
-                            echo "Logging in to Docker Hub..."
-                            docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD} ${DOCKERHUB_REGISTRY}
-                            
-                            echo "Pushing image to Docker Hub (will create repo if needed)..."
-                            docker push ${DOCKERHUB_REPO}:latest || exit 1
-                            
-                            echo "Docker Hub push completed successfully"
-                        '''
+                        withCredentials([usernamePassword(
+                            credentialsId: 'dockerhub-credentials',
+                            usernameVariable: 'DOCKERHUB_USERNAME',
+                            passwordVariable: 'DOCKERHUB_PASSWORD'
+                        )]) {
+                            sh '''
+                                echo "Logging in to Docker Hub..."
+                                docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD $DOCKERHUB_REGISTRY
+                                
+                                echo "Pushing image to Docker Hub (will create repo if needed)..."
+                                docker push $DOCKERHUB_REPO:latest || exit 1
+                                
+                                echo "Docker Hub push completed successfully"
+                            '''
+                        }
                     }
                 }
             }
