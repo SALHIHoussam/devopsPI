@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'mongodb://db:27017'  // Changé de localhost à db pour correspondre au service dans docker-compose
+        DB_HOST = 'mongodb://db:27017'
         DB_NAME = 'foodWasteDB'
         registryCredentials = "nexus"
         registry = "192.168.33.10:8083"
-        DOCKER_IMAGE = "${registry}/foodwaste-app:${env.BUILD_NUMBER}"  // Ajout d'un tag dynamique
+        DOCKER_IMAGE = "${registry}/foodwaste-app:${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -37,7 +37,6 @@ pipeline {
         stage('SonarQube Setup') {
             steps {
                 script {
-                    // Installation de Node.js pour SonarQube
                     sh '''
                         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
                         sudo apt-get install -y nodejs
@@ -51,12 +50,10 @@ pipeline {
                 script {
                     def scannerHome = tool 'SonarQube Scanner'
                     withSonarQubeEnv('sonar') {
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.nodejs.executable=$(which node) \
-                            -Dsonar.projectKey=foodwaste-app \
-                            -Dsonar.projectName=FoodWaste-App
-                        """
+                        sh "${scannerHome}/bin/sonar-scanner " +
+                           "-Dsonar.nodejs.executable=\$(which node) " +
+                           "-Dsonar.projectKey=foodwaste-app " +
+                           "-Dsonar.projectName=FoodWaste-App"
                     }
                 }
             }
@@ -73,7 +70,6 @@ pipeline {
         stage('Verify Nexus') {
             steps {
                 script {
-                    // Vérification que Nexus est accessible
                     sh """
                         until curl -sSf http://${registry} >/dev/null; do
                             echo "Waiting for Nexus to be available..."
@@ -116,7 +112,7 @@ pipeline {
                     sh """
                         docker-compose down || true
                         docker-compose up -d
-                        sleep 15  # Attendre le démarrage des services
+                        sleep 15
                         
                         # Test de santé
                         curl -sSf http://localhost:5000/api >/dev/null || exit 1
