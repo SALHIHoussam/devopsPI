@@ -4,6 +4,8 @@ pipeline {
     environment {
         DB_HOST = 'mongodb://localhost:27017'
         DB_NAME = 'foodWasteDB'
+        registryCredentials = "nexus"
+        registry = "192.168.33.10:8083"
     }
 
     stages {
@@ -49,6 +51,16 @@ pipeline {
                     sh 'docker-compose build'
                 }
             }
+        }
+        
+        stage('Deploy to Nexus') { 
+            steps{ 
+                script { 
+                    docker.withRegistry("http://"+registry, registryCredentials ) { 
+                        sh('docker push $registry/nodemongoapp:5.0 ') 
+                    } 
+                } 
+            } 
         }
         
         stage('Docker Build and Run') {
