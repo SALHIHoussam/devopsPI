@@ -11,12 +11,13 @@ services:
       - 27017:27017
     volumes:
       - mongo-data:/data/db
+      - ./data/dump:/dump
 
   app:
     build: .
-    image: 192.168.33.10:8083/foodwaste-app:latest
+    image: 192.168.33.10:8083/nodemongoapp:6.0
     restart: always
-    container_name: foodwaste-container
+    container_name: back
     ports:
       - '5000:5000'
     depends_on:
