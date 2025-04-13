@@ -6,6 +6,9 @@ pipeline {
         DB_NAME = 'foodWasteDB'
         REGISTRY = '192.168.33.10:8083'
         REGISTRY_CREDENTIALS = 'nexus'
+        DOCKERHUB_REGISTRY = 'docker.io'
+        DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
+        DOCKERHUB_REPO = 'salhihoussam/foodwaste-app' 
         SONAR_HOST_URL = 'http://192.168.33.10:9000'
     }
 
@@ -29,7 +32,6 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Add connection test and make stage non-blocking
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         def scannerHome = tool 'SonarQube Scanner'
                         withSonarQubeEnv('sonar') {
@@ -49,6 +51,7 @@ pipeline {
                 script {
                     sh 'docker-compose build'
                     sh 'docker tag foodwaste-app ${REGISTRY}/foodwaste-app:latest'
+                    sh 'docker tag foodwaste-app ${DOCKERHUB_REPO}:latest' 
                 }
             }
         }
@@ -59,6 +62,18 @@ pipeline {
                     retry(3) {
                         docker.withRegistry("http://${REGISTRY}", REGISTRY_CREDENTIALS) {
                             sh 'docker push ${REGISTRY}/foodwaste-app:latest'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to DockerHub') {
+            steps {
+                script {
+                    retry(3) {
+                        docker.withRegistry("https://${DOCKERHUB_REGISTRY}", DOCKERHUB_CREDENTIALS) {
+                            sh 'docker push ${DOCKERHUB_REPO}:latest'
                         }
                     }
                 }
