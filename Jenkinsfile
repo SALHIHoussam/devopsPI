@@ -6,6 +6,7 @@ pipeline {
         DB_NAME = 'foodWasteDB'
         REGISTRY = '192.168.33.10:8083'
         REGISTRY_CREDENTIALS = 'nexus'
+        SONAR_HOST_URL = 'http://192.168.33.10:9000'
     }
 
     stages {
@@ -28,9 +29,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    def scannerHome = tool 'SonarQube Scanner'
-                    withSonarQubeEnv('sonar') {
-                        sh "${scannerHome}/bin/sonar-scanner"
+                    // Add connection test and make stage non-blocking
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        def scannerHome = tool 'SonarQube Scanner'
+                        withSonarQubeEnv('sonar') {
+                            sh """
+                                echo "Testing SonarQube connection..."
+                                curl -I ${SONAR_HOST_URL} || echo "SonarQube connection test failed"
+                                ${scannerHome}/bin/sonar-scanner -Dsonar.host.url=${SONAR_HOST_URL}
+                            """
+                        }
                     }
                 }
             }
@@ -48,8 +56,10 @@ pipeline {
         stage('Deploy to Nexus') {
             steps {
                 script {
-                    docker.withRegistry("http://${REGISTRY}", REGISTRY_CREDENTIALS) {
-                        sh 'docker push ${REGISTRY}/foodwaste-app:latest'
+                    retry(3) {
+                        docker.withRegistry("http://${REGISTRY}", REGISTRY_CREDENTIALS) {
+                            sh 'docker push ${REGISTRY}/foodwaste-app:latest'
+                        }
                     }
                 }
             }
@@ -58,15 +68,10 @@ pipeline {
         stage('Run Application') {
             steps {
                 script {
+                    // More efficient container cleanup using docker-compose
                     sh '''
-                        if [ $(docker ps -aq -f name=foodwaste-container) ]; then
-                            docker stop foodwaste-container || true
-                            docker rm -f foodwaste-container || true
-                        fi
-                        if [ $(docker ps -aq -f name=db) ]; then
-                            docker stop db || true
-                            docker rm -f db || true
-                        fi
+                        docker-compose down || true
+                        docker rm -f foodwaste-container db || true
                     '''
                     sh 'docker-compose up -d'
                 }
