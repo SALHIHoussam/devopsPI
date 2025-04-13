@@ -18,21 +18,24 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Setup Environment') {
             steps {
                 script {
-                    sh 'npm install'
+                    // Utilisation de Node.js préconfiguré dans Jenkins
+                    def nodejs = tool name: 'NodeJS-18', type: 'nodejs'
+                    env.PATH = "${nodejs}/bin:${env.PATH}"
+                    
+                    // Vérification des versions
+                    sh 'node --version'
+                    sh 'npm --version'
                 }
             }
         }
 
-        stage('SonarQube Setup') {
+        stage('Install Dependencies') {
             steps {
                 script {
-                    sh '''
-                        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-                        sudo apt-get install -y nodejs
-                    '''
+                    sh 'npm install'
                 }
             }
         }
@@ -68,7 +71,7 @@ pipeline {
                             sleep 5
                         done
                         
-                        # Configuration Docker pour registry non sécurisé
+                        // Configuration Docker pour registry non sécurisé
                         sudo mkdir -p /etc/docker
                         echo '{ \"insecure-registries\":[\"${registry}\"] }' | sudo tee /etc/docker/daemon.json
                         sudo systemctl restart docker
@@ -106,7 +109,7 @@ pipeline {
                         docker-compose up -d
                         sleep 15
                         
-                        # Test de santé
+                        // Test de santé
                         curl -sSf http://localhost:5000/api >/dev/null || exit 1
                     """
                 }
