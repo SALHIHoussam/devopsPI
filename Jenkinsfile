@@ -2,8 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'mongodb://localhost:27017'
+        DB_HOST = 'db' // Using service name from docker-compose
         DB_NAME = 'foodWasteDB'
+        REGISTRY = '192.168.33.10:8083'
+        REGISTRY_CREDENTIALS = 'nexus'
     }
 
     stages {
@@ -34,34 +36,34 @@ pipeline {
             }
         }
 
-        stage('Build Application') {
-            steps {
-                script {
-                    sh 'nohup npm run dev & echo $! > app.pid'
-                    sh 'sleep 15'
-                }
-            }
-        }
-
-        stage('Building images (node and mongo)') {
+        stage('Build Docker Images') {
             steps {
                 script {
                     sh 'docker-compose build'
+                    
+                    // Tag the built image for Nexus
+                    sh 'docker tag foodwaste-app ${REGISTRY}/foodwaste-app:latest'
                 }
             }
         }
         
-        stage('Docker Build and Run') {
+        stage('Run Application') {
             steps {
                 script {
-                    sh 'docker build -t foodwaste-app .'
+                    // Stop and remove existing containers if they exist
                     sh '''
                         if [ $(docker ps -aq -f name=foodwaste-container) ]; then
                             docker stop foodwaste-container || true
                             docker rm -f foodwaste-container || true
                         fi
+                        if [ $(docker ps -aq -f name=db) ]; then
+                            docker stop db || true
+                            docker rm -f db || true
+                        fi
                     '''
-                    sh 'docker run -d --restart unless-stopped --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    
+                    // Start the application with docker-compose
+                    sh 'docker-compose up -d'
                 }
             }
         }
@@ -70,7 +72,6 @@ pipeline {
     post {
         always {
             script {
-                // Nettoyage uniquement du processus npm
                 sh '''
                     if [ -f app.pid ]; then
                         kill $(cat app.pid) || true
@@ -81,7 +82,7 @@ pipeline {
         }
 
         success {
-            echo "✅ Pipeline executed successfully! Application is running at http://<your-server-ip>:5000"
+            echo "✅ Pipeline executed successfully! Application is running at http://192.168.33.10:5000"
         }
 
         failure {
