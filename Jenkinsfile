@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'db' // Using service name from docker-compose
+        DB_HOST = 'db'
         DB_NAME = 'foodWasteDB'
         REGISTRY = '192.168.33.10:8083'
         REGISTRY_CREDENTIALS = 'nexus'
@@ -40,9 +40,17 @@ pipeline {
             steps {
                 script {
                     sh 'docker-compose build'
-                    
-                    // Tag the built image for Nexus
                     sh 'docker tag foodwaste-app ${REGISTRY}/foodwaste-app:latest'
+                }
+            }
+        }
+        
+        stage('Deploy to Nexus') {
+            steps {
+                script {
+                    docker.withRegistry("http://${REGISTRY}", REGISTRY_CREDENTIALS) {
+                        sh 'docker push ${REGISTRY}/foodwaste-app:latest'
+                    }
                 }
             }
         }
@@ -50,7 +58,6 @@ pipeline {
         stage('Run Application') {
             steps {
                 script {
-                    // Stop and remove existing containers if they exist
                     sh '''
                         if [ $(docker ps -aq -f name=foodwaste-container) ]; then
                             docker stop foodwaste-container || true
@@ -61,8 +68,6 @@ pipeline {
                             docker rm -f db || true
                         fi
                     '''
-                    
-                    // Start the application with docker-compose
                     sh 'docker-compose up -d'
                 }
             }
