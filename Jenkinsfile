@@ -2,8 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'mongodb://localhost:27017'
+        DB_HOST = 'mongodb://db:27017'
         DB_NAME = 'foodWasteDB'
+        registryCredentials = "nexus"
+        registry = "192.168.33.10:8083"
+        DOCKER_IMAGE = "${registry}/foodwaste-app:${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -23,6 +26,14 @@ pipeline {
             }
         }
         
+        stage('Unit Tests') {
+            steps {
+                script {
+                    sh 'npm test'
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -37,31 +48,65 @@ pipeline {
         stage('Build Application') {
             steps {
                 script {
-                    sh 'nohup npm run dev & echo $! > app.pid'
-                    sh 'sleep 15'
+                    sh 'npm run build'
                 }
             }
         }
 
-        stage('Building images (node and mongo)') {
+        stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'docker-compose build'
+                    // Build de l'image de l'application
+                    sh "docker build -t ${DOCKER_IMAGE} ."
+                    
+                    // Tag de l'image MongoDB pour Nexus
+                    sh "docker tag mongo:4.2 ${registry}/mongo:4.2"
                 }
             }
         }
         
-        stage('Docker Build and Run') {
+        stage('Push to Nexus') {
             steps {
                 script {
-                    sh 'docker build -t foodwaste-app .'
+                    docker.withRegistry("http://${registry}", registryCredentials) {
+                        // Push de l'image application
+                        sh "docker push ${DOCKER_IMAGE}"
+                        
+                        // Push de l'image MongoDB
+                        sh "docker push ${registry}/mongo:4.2"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                script {
+                    // Arrêt des conteneurs existants
                     sh '''
-                        if [ $(docker ps -aq -f name=foodwaste-container) ]; then
-                            docker stop foodwaste-container || true
-                            docker rm -f foodwaste-container || true
-                        fi
+                        docker-compose down || true
+                        docker stop foodwaste-container || true
+                        docker rm foodwaste-container || true
                     '''
-                    sh 'docker run -d --restart unless-stopped --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    
+                    // Lancement avec docker-compose
+                    sh "docker-compose up -d"
+                    
+                    // Vérification du statut
+                    sh 'docker ps'
+                    sh 'sleep 30' // Attente pour le démarrage complet
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                script {
+                    // Test simple pour vérifier que l'application répond
+                    sh '''
+                        curl -sSf http://localhost:5000/api > /dev/null || exit 1
+                        echo "Application is responding correctly"
+                    '''
                 }
             }
         }
@@ -70,22 +115,26 @@ pipeline {
     post {
         always {
             script {
-                // Nettoyage uniquement du processus npm
+                // Nettoyage
                 sh '''
-                    if [ -f app.pid ]; then
-                        kill $(cat app.pid) || true
-                        rm -f app.pid
-                    fi
+                    docker-compose down || true
+                    docker rmi -f ${DOCKER_IMAGE} || true
                 '''
+                cleanWs()
             }
         }
 
         success {
-            echo "✅ Pipeline executed successfully! Application is running at http://<your-server-ip>:5000"
+            echo "✅ Pipeline executed successfully!"
+            echo "Application URL: http://192.168.33.10:5000"
+            echo "Nexus Repository: http://192.168.33.10:8081"
         }
 
         failure {
             echo "❌ Pipeline failed. Check the logs for details."
+            slackSend channel: '#devops-alerts',
+                      color: 'danger',
+                      message: "Build ${env.BUILD_NUMBER} failed - ${env.BUILD_URL}"
         }
     }
 }
