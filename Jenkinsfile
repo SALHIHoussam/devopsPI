@@ -2,10 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DB_HOST = 'mongodb://localhost:27017'
+        DB_HOST = 'mongodb://db:27017'  // Changé de localhost à db pour correspondre au service dans docker-compose
         DB_NAME = 'foodWasteDB'
         registryCredentials = "nexus"
         registry = "192.168.33.10:8083"
+        DOCKER_IMAGE = "${registry}/foodwaste-app:${env.BUILD_NUMBER}"  // Ajout d'un tag dynamique
     }
 
     stages {
@@ -24,13 +25,38 @@ pipeline {
                 }
             }
         }
-        
+
+        stage('Unit Tests') {
+            steps {
+                script {
+                    sh 'npm test'
+                }
+            }
+        }
+
+        stage('SonarQube Setup') {
+            steps {
+                script {
+                    // Installation de Node.js pour SonarQube
+                    sh '''
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+                        sudo apt-get install -y nodejs
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 script {
                     def scannerHome = tool 'SonarQube Scanner'
                     withSonarQubeEnv('sonar') {
-                        sh "${scannerHome}/bin/sonar-scanner"
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.nodejs.executable=$(which node) \
+                            -Dsonar.projectKey=foodwaste-app \
+                            -Dsonar.projectName=FoodWaste-App
+                        """
                     }
                 }
             }
@@ -39,41 +65,62 @@ pipeline {
         stage('Build Application') {
             steps {
                 script {
-                    sh 'nohup npm run dev & echo $! > app.pid'
-                    sh 'sleep 15'
+                    sh 'npm run build'
                 }
             }
         }
 
-        stage('Building images (node and mongo)') {
+        stage('Verify Nexus') {
             steps {
                 script {
-                    sh 'docker-compose build'
+                    // Vérification que Nexus est accessible
+                    sh """
+                        until curl -sSf http://${registry} >/dev/null; do
+                            echo "Waiting for Nexus to be available..."
+                            sleep 5
+                        done
+                        
+                        # Configuration Docker pour registry non sécurisé
+                        sudo mkdir -p /etc/docker
+                        echo '{ \"insecure-registries\":[\"${registry}\"] }' | sudo tee /etc/docker/daemon.json
+                        sudo systemctl restart docker
+                        sleep 5
+                    """
                 }
             }
         }
-        
-        stage('Deploy to Nexus') { 
-            steps{ 
-                script { 
-                    docker.withRegistry("http://"+registry, registryCredentials ) { 
-                        sh('docker push $registry/nodemongoapp:5.0 ') 
-                    } 
-                } 
-            } 
-        }
-        
-        stage('Docker Build and Run') {
+
+        stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'docker build -t foodwaste-app .'
-                    sh '''
-                        if [ $(docker ps -aq -f name=foodwaste-container) ]; then
-                            docker stop foodwaste-container || true
-                            docker rm -f foodwaste-container || true
-                        fi
-                    '''
-                    sh 'docker run -d --restart unless-stopped --name foodwaste-container -p 5000:5000 -e DB_HOST=${DB_HOST} -e DB_NAME=${DB_NAME} foodwaste-app'
+                    sh "docker-compose build"
+                    sh "docker tag mongo:4.2 ${registry}/mongo:4.2"
+                }
+            }
+        }
+
+        stage('Push to Nexus') {
+            steps {
+                script {
+                    docker.withRegistry("http://${registry}", registryCredentials) {
+                        sh "docker push ${DOCKER_IMAGE}"
+                        sh "docker push ${registry}/mongo:4.2"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                script {
+                    sh """
+                        docker-compose down || true
+                        docker-compose up -d
+                        sleep 15  # Attendre le démarrage des services
+                        
+                        # Test de santé
+                        curl -sSf http://localhost:5000/api >/dev/null || exit 1
+                    """
                 }
             }
         }
@@ -82,18 +129,19 @@ pipeline {
     post {
         always {
             script {
-                // Nettoyage uniquement du processus npm
                 sh '''
-                    if [ -f app.pid ]; then
-                        kill $(cat app.pid) || true
-                        rm -f app.pid
-                    fi
+                    docker-compose down || true
+                    [ -f app.pid ] && kill $(cat app.pid) || true
+                    rm -f app.pid
                 '''
+                cleanWs()
             }
         }
 
         success {
-            echo "✅ Pipeline executed successfully! Application is running at http://<your-server-ip>:5000"
+            echo "✅ Pipeline executed successfully!"
+            echo "Application URL: http://192.168.33.10:5000"
+            echo "Nexus Repository: http://${registry}"
         }
 
         failure {
