@@ -9,7 +9,6 @@ pipeline {
         DOCKERHUB_REGISTRY = 'docker.io'
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
         DOCKERHUB_REPO = 'salhihoussam/foodwaste-app' 
-        DOCKERHUB_USERNAME = credentials('dockerhub-credentials').username
         SONAR_HOST_URL = 'http://192.168.33.10:9000'
     }
 
@@ -70,24 +69,23 @@ pipeline {
         }
         
         stage('Deploy to DockerHub') {
+            environment {
+                // Define credentials here instead of at the top level
+                DOCKERHUB_USERNAME = credentials('dockerhub-credentials').username
+                DOCKERHUB_PASSWORD = credentials('dockerhub-credentials').password
+            }
             steps {
                 script {
                     retry(3) {
-                        // First login to Docker Hub
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', 
-                                       passwordVariable: 'DOCKERHUB_PASSWORD', 
-                                       usernameVariable: 'DOCKERHUB_USERNAME')]) {
-                            // Create repository if it doesn't exist (Docker Hub automatically creates on first push)
-                            sh '''
-                                echo "Logging in to Docker Hub..."
-                                docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD}
-                                
-                                echo "Pushing image to Docker Hub (will create repo if needed)..."
-                                docker push ${DOCKERHUB_REPO}:latest || exit 1
-                                
-                                echo "Docker Hub push completed successfully"
-                            '''
-                        }
+                        sh '''
+                            echo "Logging in to Docker Hub..."
+                            docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD} ${DOCKERHUB_REGISTRY}
+                            
+                            echo "Pushing image to Docker Hub (will create repo if needed)..."
+                            docker push ${DOCKERHUB_REPO}:latest || exit 1
+                            
+                            echo "Docker Hub push completed successfully"
+                        '''
                     }
                 }
             }
@@ -133,7 +131,6 @@ pipeline {
         failure {
             script {
                 echo "❌ Pipeline failed in stage: ${currentBuild.currentResult}"
-                // Add more detailed error reporting if needed
                 if (currentBuild.currentResult == 'FAILURE') {
                     def failedStage = currentBuild.rawBuild.getExecution().getStages().find { it.status.toString() == 'FAILED' }
                     echo "Failure occurred in stage: ${failedStage?.name ?: 'Unknown'}"
