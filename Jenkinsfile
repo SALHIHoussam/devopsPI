@@ -68,12 +68,19 @@ pipeline {
         stage('Run Application') {
             steps {
                 script {
-                    // More efficient container cleanup using docker-compose
+                    // Cleanup existing containers
                     sh '''
                         docker-compose down || true
                         docker rm -f foodwaste-container db || true
                     '''
-                    sh 'docker-compose up -d'
+                    
+                    // Pull the image from Nexus and run
+                    docker.withRegistry("http://${REGISTRY}", REGISTRY_CREDENTIALS) {
+                        sh '''
+                            docker pull ${REGISTRY}/foodwaste-app:latest
+                            docker-compose up -d
+                        '''
+                    }
                 }
             }
         }
