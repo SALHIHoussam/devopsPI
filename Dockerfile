@@ -1,4 +1,4 @@
-# Use official Node.js LTS image (updated to 18.x)
+# Use official Node.js LTS image
 FROM node:18-alpine as builder
 
 # Create app directory
@@ -13,9 +13,6 @@ RUN npm install
 # Copy all source files
 COPY . .
 
-# Build the application (if needed)
-# RUN npm run build
-
 # Production stage
 FROM node:18-alpine
 
@@ -24,11 +21,13 @@ WORKDIR /app
 # Copy from builder stage
 COPY --from=builder /app .
 
+# Environment variables (defaults, can be overridden)
+ENV DB_HOST=db
+ENV DB_NAME=foodWasteDB
+ENV PORT=5000
+
 # Expose application port
 EXPOSE 5000
-
-# Runtime environment variable for MongoDB
-ENV MONGODB_URI=mongodb://mongo:27017/foodWasteDB
 
 # Command to run the application
 CMD ["npm", "start"]
